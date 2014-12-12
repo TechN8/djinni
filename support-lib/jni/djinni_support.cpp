@@ -17,6 +17,7 @@
 #include "djinni_support.hpp"
 #include <cassert>
 #include <cstdlib>
+#include <android/log.h>
 
 static_assert(sizeof(jlong) >= sizeof(void*), "must be able to fit a void* into a jlong");
 
@@ -42,7 +43,13 @@ void jniShutdown() {
 JNIEnv * jniGetThreadEnv() {
     assert(g_cachedJVM);
     JNIEnv * env = nullptr;
-    const jint get_res = g_cachedJVM->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    jint get_res = g_cachedJVM->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    if (get_res == JNI_EDETACHED) {
+        // We're on a different thread, attach to the JNI environment.
+        __android_log_print(ANDROID_LOG_WARN, "jniGetThreadEnv", "get_res = JNI_EDETACHED, env = %p", env);
+        get_res = g_cachedJVM->AttachCurrentThread(&env, NULL);
+    }
+    __android_log_print(ANDROID_LOG_VERBOSE, "jniGetThreadEnv", "get_res = %d, env = %p", get_res, env);
     if (get_res != 0 || !env) {
         // :(
         std::abort();
